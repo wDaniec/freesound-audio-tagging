@@ -30,6 +30,13 @@ class Config():
         # I strongly believe that ordering won't change, but didn't proof check it
         self.label_to_id = dict([(x,i) for i, x in enumerate(self.all_classes)])
         self.id_to_label = dict([(i,x) for i, x in enumerate(self.all_classes)])
+    
+    def convert_to_labels(self, vec):
+        labels = []
+        for i, x in enumerate(vec):
+            if(x == 1):
+                labels.append(self.id_to_label[i])
+        return labels
 
 
 class read_sound_file():
@@ -101,6 +108,6 @@ for i, (x, y) in enumerate(train_loader):
         print('training_data: ')
         print(x[0].shape)
         print('labels: ')
-        print(y[0])
+        print(config.convert_to_labels(y[0]))
         
 neptune.stop()
