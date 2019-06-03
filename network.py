@@ -6,6 +6,7 @@ import os
 import wave
 from torch.utils.data import Dataset, DataLoader
 
+import utils
 import pandas as pd
 
 
@@ -17,29 +18,16 @@ train_noisy = pd.read_csv("./input/train_noisy.csv")
 
 
 class Config():
-    def __init__(self, num_of_epochs=5, learning_rate=0.001, batch_size=16, audio_duration=4, sampling_rate=16000, classes_dict={}):
+    def __init__(self, num_of_epochs=5, learning_rate=0.001, batch_size=16, audio_duration=4, sampling_rate=16000):
         self.num_of_epochs = num_of_epochs
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.audio_duration = audio_duration
         self.sampling_rate = sampling_rate
         self.audio_length = self.sampling_rate * self.audio_duration
-        self.all_classes = classes_dict
-
-        # i'm not so sure about this part.
-        # I strongly believe that ordering won't change, but didn't proof check it
-        self.label_to_id = dict([(x,i) for i, x in enumerate(self.all_classes)])
-        self.id_to_label = dict([(i,x) for i, x in enumerate(self.all_classes)])
-    
-    def convert_to_labels(self, vec):
-        labels = []
-        for i, x in enumerate(vec):
-            if(x == 1):
-                labels.append(self.id_to_label[i])
-        return labels
 
 
-class read_sound_file():
+class ReadSoundFile():
 
     def __init__(self, config):
         self.config = config
@@ -64,15 +52,8 @@ class read_sound_file():
         
 
         labels = sample[1].split(',')
-        labels = self.multi_hot_embedding(labels)
+        labels = utils.multi_hot_embedding(labels)
         return torch.from_numpy(data), labels
-
-    def multi_hot_embedding(self, labels):
-        embedding = np.zeros(len(self.config.all_classes))
-        for label in labels:
-            id = self.config.label_to_id[label]
-            embedding[id] = 1
-        return embedding
 
 class SoundDataset(Dataset):
 
@@ -92,15 +73,9 @@ class SoundDataset(Dataset):
             sample = self.transform(sample)
         return sample
 
-def get_all_classes(dataset):
-    my_set = set()
-    for idx, x in dataset.iterrows():
-        labels = x.labels.split(',')
-        my_set.update(labels)
-    return my_set
 
-config = Config(classes_dict = get_all_classes(train_curated))
-dataset = SoundDataset("./input/train_curated.csv", './input/train_curated/', read_sound_file(config))
+config = Config()
+dataset = SoundDataset("./input/train_curated.csv", './input/train_curated/', ReadSoundFile(config))
 
 train_loader = DataLoader(dataset, batch_size=config.batch_size)
 for i, (x, y) in enumerate(train_loader):
@@ -108,6 +83,7 @@ for i, (x, y) in enumerate(train_loader):
         print('training_data: ')
         print(x[0].shape)
         print('labels: ')
-        print(config.convert_to_labels(y[0]))
+        for instance in y:
+            print(utils.convert_to_labels(instance))
         
 neptune.stop()
