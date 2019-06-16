@@ -5,6 +5,9 @@ import librosa
 import os
 import wave
 from torch.utils.data import Dataset, DataLoader
+import torch.nn as nn
+import torch.nn.functional as F
+
 
 import utils
 import pandas as pd
@@ -54,7 +57,9 @@ class ReadSoundFile():
 
         labels = sample[1].split(',')
         labels = utils.multi_hot_embedding(labels)
-        return torch.from_numpy(data), labels
+        data = torch.from_numpy(data)
+        data = data.view(1, -1)
+        return data, labels
 
 class SoundDataset(Dataset):
 
@@ -86,11 +91,43 @@ train_loader = DataLoader(train_data, batch_size=config.batch_size)
 val_loader = DataLoader(val_data, batch_size=config.batch_size)
 test_loader = DataLoader(test_data, batch_size = config.batch_size)
 
+
+class Classifier(nn.Module):
+
+    def __init__(self, num_classes):
+        super().__init__()
+
+        self.conv11 = nn.Conv1d(1, 16, 9)
+        self.conv12 = nn.Conv1d(16, 16, 9)
+        self.conv21 = nn.Conv1d(16, 32, 3)
+        self.conv22 = nn.Conv1d(32, 32, 3)
+        self.conv41 = nn.Conv1d(32,256, 3)
+        self.conv42 = nn.Conv1d(256, 256, 3)
+        self.max_pool1 = nn.MaxPool1d(16)
+        self.max_pool2 = nn.MaxPool1d(4)
+        self.dropout = nn.Dropout(0.1)
+        self.fc1 = nn.Linear(256, 64)
+        self.fc2 = nn.Linear(64, 1028)
+        self.fc3 = nn.Linear(1028, num_classes)
+
+
+    def forward(self, x):
+        x = self.dropout(self.max_pool1(self.conv12(self.conv11(x))))
+        x = self.dropout(self.max_pool2(self.conv22(self.conv21(x))))
+        x = self.dropout(self.max_pool2(self.conv22(self.conv22(x))))
+        x = self.conv42(self.conv41(x))
+        x, _ = torch.max(x, dim=2)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
+
+
+model = Classifier(80)
+
 for i, (x, y) in enumerate(val_loader):
     if(i <= 1):
-        print('training_data: ')
-        print(x[0].shape)
-        print('labels: ')
+        print(model(x).shape)
         for instance in y:
             print(utils.convert_to_labels(instance))
         

@@ -16,8 +16,6 @@ def multi_hot_embedding(labels):
     return embedding
 
 def get_all_classes(dataset):
-    # would be better if i had the classes saved somewhere
-    # iterating through the dataset is suboptimal
     my_set = set()
     for idx, x in dataset.iterrows():
         labels = x.labels.split(',')
