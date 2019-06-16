@@ -18,13 +18,14 @@ train_noisy = pd.read_csv("./input/train_noisy.csv")
 
 
 class Config():
-    def __init__(self, num_of_epochs=5, learning_rate=0.001, batch_size=16, audio_duration=4, sampling_rate=16000):
+    def __init__(self, num_of_epochs=5, learning_rate=0.001, batch_size=16, audio_duration=4, sampling_rate=16000, val_freq=0.2):
         self.num_of_epochs = num_of_epochs
         self.learning_rate = learning_rate
         self.batch_size = batch_size
         self.audio_duration = audio_duration
         self.sampling_rate = sampling_rate
         self.audio_length = self.sampling_rate * self.audio_duration
+        self.val_freq = val_freq
 
 
 class ReadSoundFile():
@@ -75,10 +76,17 @@ class SoundDataset(Dataset):
 
 
 config = Config()
-dataset = SoundDataset("./input/train_curated.csv", './input/train_curated/', ReadSoundFile(config))
+train_data = SoundDataset("./input/train_curated_small.csv", './input/curated_data/', ReadSoundFile(config))
+val_data = SoundDataset("./input/val_curated.csv", "./input/curated_data/", ReadSoundFile(config))
+test_data = SoundDataset("./input/test_curated.csv", "./input/curated_data/", ReadSoundFile(config))
 
-train_loader = DataLoader(dataset, batch_size=config.batch_size)
-for i, (x, y) in enumerate(train_loader):
+print(len(test_data), len(val_data), len(train_data))
+
+train_loader = DataLoader(train_data, batch_size=config.batch_size)
+val_loader = DataLoader(val_data, batch_size=config.batch_size)
+test_loader = DataLoader(test_data, batch_size = config.batch_size)
+
+for i, (x, y) in enumerate(val_loader):
     if(i <= 1):
         print('training_data: ')
         print(x[0].shape)
