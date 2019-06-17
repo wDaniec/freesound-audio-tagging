@@ -2,13 +2,10 @@ import neptune
 import torch
 import numpy as np
 import librosa
-import os
-import wave
 from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn
 import torch.nn.functional as F
-
-
+import torch.optim as optim
 import utils
 import pandas as pd
 
@@ -16,12 +13,9 @@ import pandas as pd
 neptune.init(project_qualified_name='Naukowe-Kolo-Robotyki-I-Sztucznej-Inteligencji/freesound-audio-tagging')
 neptune.create_experiment()
 
-train_curated = pd.read_csv("./input/train_curated.csv")
-train_noisy = pd.read_csv("./input/train_noisy.csv")
-
 
 class Config():
-    def __init__(self, num_of_epochs=5, learning_rate=0.001, batch_size=16, audio_duration=4, sampling_rate=16000, val_freq=0.2):
+    def __init__(self, num_of_epochs=5, learning_rate=0.001, batch_size=128, audio_duration=4, sampling_rate=16000, val_freq=0.2):
         self.num_of_epochs = num_of_epochs
         self.learning_rate = learning_rate
         self.batch_size = batch_size
@@ -59,7 +53,16 @@ class ReadSoundFile():
         labels = utils.multi_hot_embedding(labels)
         data = torch.from_numpy(data)
         data = data.view(1, -1)
+        print(data.shape)
         return data, labels
+
+class MockTransform():
+
+    def __init__(self, config):
+        self.config = config
+    
+    def __call__(self, sample):
+        return torch.randn(1, config.audio_length), torch.randn(80)
 
 class SoundDataset(Dataset):
 
@@ -78,18 +81,6 @@ class SoundDataset(Dataset):
         if(self.transform):
             sample = self.transform(sample)
         return sample
-
-
-config = Config()
-train_data = SoundDataset("./input/train_curated_small.csv", './input/curated_data/', ReadSoundFile(config))
-val_data = SoundDataset("./input/val_curated.csv", "./input/curated_data/", ReadSoundFile(config))
-test_data = SoundDataset("./input/test_curated.csv", "./input/curated_data/", ReadSoundFile(config))
-
-print(len(test_data), len(val_data), len(train_data))
-
-train_loader = DataLoader(train_data, batch_size=config.batch_size)
-val_loader = DataLoader(val_data, batch_size=config.batch_size)
-test_loader = DataLoader(test_data, batch_size = config.batch_size)
 
 
 class ConvBlock(nn.Module):
@@ -137,12 +128,53 @@ class Classifier(nn.Module):
         return x
 
 
-model = Classifier(80)
+def train_model(config):
+    train_data = SoundDataset("./input/train_curated_small.csv", './input/curated_data/', MockTransform(config))
+    val_data = SoundDataset("./input/val_curated.csv", "./input/curated_data/", MockTransform(config))
+    test_data = SoundDataset("./input/test_curated.csv", "./input/curated_data/", ReadSoundFile(config))
 
-for i, (x, y) in enumerate(val_loader):
-    if(i <= 1):
-        print(model(x).shape)
-        for instance in y:
-            print(utils.convert_to_labels(instance))
+    print(len(test_data), len(val_data), len(train_data))
+
+    train_loader = DataLoader(train_data, batch_size=config.batch_size)
+    val_loader = DataLoader(val_data, batch_size=config.batch_size)
+    test_loader = DataLoader(test_data, batch_size = config.batch_size)
+
+    model = Classifier(80).cuda()
+    criterion = nn.BCEWithLogitsLoss().cuda()
+    optimizer = optim.Adam(params=model.parameters(), lr=config.learning_rate, amsgrad=False)
+    best_epoch = -1
+
+    for epoch in range(config.num_of_epochs):
+        model.train()
+        avg_train_loss = 0.0
+        for i, (x_batch, y_batch) in enumerate(train_loader):
+            print(i, ' | ', len(train_loader))
+            x_batch, y_batch = x_batch.cuda(), y_batch.cuda().float()
+            preds = model(x_batch)
+            loss = criterion(preds, y_batch)
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            avg_train_loss += loss.item() / len(train_loader)
+
+        model.eval()
+
+        avg_val_loss = 0.0
+        for i, (x_batch, y_batch) in enumerate(val_loader):
+            print('validation set: ', i, ' | ', len(val_loader))
+            x_batch, y_batch = x_batch.cuda(), y_batch.cuda().float()
+            preds = model(x_batch)
+            loss = criterion(preds, y_batch)
+
+            avg_val_loss += loss.item() / len(val_loader)
+        
+        print(f'Epoch {epoch+1} - avg_train_loss: {avg_train_loss:.4f} | avg_val_loss: {avg_val_loss:.4f}')
+
+
+config = Config()
+
+train_model(config)
         
 neptune.stop()
