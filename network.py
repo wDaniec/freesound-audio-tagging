@@ -92,34 +92,48 @@ val_loader = DataLoader(val_data, batch_size=config.batch_size)
 test_loader = DataLoader(test_data, batch_size = config.batch_size)
 
 
+class ConvBlock(nn.Module):
+
+    def __init__(self, in_channels, out_channels, kernel_size, pool_size):
+        super().__init__()
+
+        self.conv = nn.Sequential(
+            nn.Conv1d(in_channels, out_channels, kernel_size),
+            nn.Conv1d(out_channels, out_channels, kernel_size),
+            nn.MaxPool1d(pool_size),
+            nn.Dropout(0.1)
+        )
+    
+    def forward(self, x):
+        return self.conv(x)
+    
+
 class Classifier(nn.Module):
 
     def __init__(self, num_classes):
         super().__init__()
 
-        self.conv11 = nn.Conv1d(1, 16, 9)
-        self.conv12 = nn.Conv1d(16, 16, 9)
-        self.conv21 = nn.Conv1d(16, 32, 3)
-        self.conv22 = nn.Conv1d(32, 32, 3)
-        self.conv41 = nn.Conv1d(32,256, 3)
-        self.conv42 = nn.Conv1d(256, 256, 3)
-        self.max_pool1 = nn.MaxPool1d(16)
-        self.max_pool2 = nn.MaxPool1d(4)
-        self.dropout = nn.Dropout(0.1)
-        self.fc1 = nn.Linear(256, 64)
-        self.fc2 = nn.Linear(64, 1028)
-        self.fc3 = nn.Linear(1028, num_classes)
+
+        self.conv = nn.Sequential(
+            ConvBlock(1, 16, 9, 16),
+            ConvBlock(16, 32, 3, 4),
+            ConvBlock(32, 32, 3, 4),
+            ConvBlock(32, 256, 3, 4)
+        )
+
+        self.fc = nn.Sequential(
+            nn.Linear(256, 64),
+            nn.ReLU(),
+            nn.Linear(64, 1028),
+            nn.ReLU(),
+            nn.Linear(1028, num_classes)
+        )
 
 
     def forward(self, x):
-        x = self.dropout(self.max_pool1(self.conv12(self.conv11(x))))
-        x = self.dropout(self.max_pool2(self.conv22(self.conv21(x))))
-        x = self.dropout(self.max_pool2(self.conv22(self.conv22(x))))
-        x = self.conv42(self.conv41(x))
+        x = self.conv(x)
         x, _ = torch.max(x, dim=2)
-        x = F.relu(self.fc1(x))
-        x = F.relu(self.fc2(x))
-        x = self.fc3(x)
+        x = self.fc(x)
         return x
 
 
